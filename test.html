@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microphone Audio Visualizer</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Step 2: Set Up the Canvas Styling */
+        canvas {
+            background-color: black;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            border: 1px solid #333;
+            max-width: 100%;
+        }
+
+        button {
+            background-color: #3b49df; /* DEV.to blue */
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #2f3ab2;
+        }
+
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .error {
+            color: #ff4444;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Microphone Waveform Visualizer</h1>
+    
+    <button id="startBtn">Start Microphone</button>
+
+    <canvas id="oscilloscope" width="600" height="200"></canvas>
+
+    <div id="errorMessage" class="error"></div>
+
+    <script>
+        // DOM Elements
+        const canvas = document.getElementById("oscilloscope");
+        const canvasCtx = canvas.getContext("2d");
+        const startBtn = document.getElementById("startBtn");
+        const errorMsg = document.getElementById("errorMessage");
+
+        // Logic to handle the button click
+        startBtn.addEventListener('click', async () => {
+            try {
+                // Step 1: Request Microphone Access & Create Context
+                // We create the context here to satisfy browser autoplay policies
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                const source = audioContext.createMediaStreamSource(stream);
+                
+                // Disable button after successful start
+                startBtn.textContent = "Microphone Active";
+                startBtn.disabled = true;
+
+                // Call the visualization function
+                visualize(source, audioContext);
+
+            } catch (err) {
+                console.error("Microphone access denied:", err);
+                errorMsg.textContent = "Error: Could not access microphone. Please allow permissions.";
+            }
+        });
+
+        // Step 3: Create Analyser Node and Draw
+        function visualize(source, audioContext) {
+            const analyser = audioContext.createAnalyser();
+            
+            // FFT Size defines the data window size
+            analyser.fftSize = 2048; 
+            
+            const bufferLength = analyser.fftSize;
+            const dataArray = new Uint8Array(bufferLength);
+
+            source.connect(analyser);
+
+            function draw() {
+                // Schedule the next frame
+                requestAnimationFrame(draw);
+
+                // Get time-domain data (waveform)
+                analyser.getByteTimeDomainData(dataArray);
+
+                // Clear the canvas
+                canvasCtx.fillStyle = "black";
+                canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Set line style
+                canvasCtx.lineWidth = 2;
+                canvasCtx.strokeStyle = "lime";
+
+                canvasCtx.beginPath();
+
+                const sliceWidth = canvas.width / bufferLength;
+                let x = 0;
+
+                // Loop through data and draw the wave
+                for (let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0; // Normalize byte data (0-255) to 0-2 range
+                    const y = (v * canvas.height) / 2;
+
+                    if (i === 0) {
+                        canvasCtx.moveTo(x, y);
+                    } else {
+                        canvasCtx.lineTo(x, y);
+                    }
+
+                    x += sliceWidth;
+                }
+
+                canvasCtx.lineTo(canvas.width, canvas.height / 2);
+                canvasCtx.stroke();
+            }
+
+            // Start the drawing loop
+            draw();
+        }
+    </script>
+</body>
+</html>
